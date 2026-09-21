@@ -1,3 +1,9 @@
 .sites-runtime/
 *.tar.gz
 qa/
+
+node_modules/
+.next/
+.env*
+!.env.example
+.vercel/

@@ -1,6 +1,6 @@
 # Product imagery
 
-Asset: `dist/assets/product-studio.png`
+Asset: `public/assets/product-studio.png`
 
 Created with the built-in image-generation tool. These are illustrative demo products, not photographs of actual stock. The interface shows the four quadrants through CSS without modifying the generated image.
 

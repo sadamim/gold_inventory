@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { normalizeMetalRates, TROY_OUNCE_GRAMS } from '../lib/metals.mjs';
+const now=new Date('2026-09-19T08:00:00Z');
+const gold={symbol:'XAU',currency:'USD',price:TROY_OUNCE_GRAMS*100,updatedAt:now.toISOString()};
+const silver={symbol:'XAG',currency:'USD',price:TROY_OUNCE_GRAMS,updatedAt:now.toISOString()};
+const fx={base:'USD',date:'2026-09-18',rates:{INR:90}};
+test('Metal rates convert troy ounces to grams and preserve purity ratios',()=>{const r=normalizeMetalRates(gold,silver,fx,now);assert.ok(Math.abs(r.gold[0].value-9000)<.001);assert.ok(Math.abs(r.gold[1].value-8250)<.001);assert.ok(Math.abs(r.silver[0].value-89.91)<.001);assert.ok(Math.abs(r.silver[1].value-83.25)<.001);assert.equal(r.delayed,false);});
+test('Invalid currencies, missing values and future timestamps are rejected',()=>{assert.throws(()=>normalizeMetalRates({...gold,currency:'INR'},silver,fx,now));assert.throws(()=>normalizeMetalRates(gold,silver,{...fx,rates:{}},now));assert.throws(()=>normalizeMetalRates({...gold,price:-1},silver,fx,now));assert.throws(()=>normalizeMetalRates({...gold,updatedAt:'2027-01-01T00:00:00Z'},silver,fx,now));});
+test('Outdated source values are explicitly marked delayed',()=>{const r=normalizeMetalRates({...gold,updatedAt:'2026-09-18T08:00:00Z'},silver,fx,now);assert.equal(r.delayed,true);});
