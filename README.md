@@ -1,4 +1,4 @@
-# Global Inventory
+# Inventory Nexus
 
 A Next.js / React prototype for general inventory, branch records, transfers, reservations and reporting.
 
@@ -8,7 +8,7 @@ Use Node.js 20.9 or newer. Run `npm install`, then `npm run dev`. Open http://lo
 
 ## Demo access and storage
 
-- `admin@global.demo`, `london@global.demo`, or `singapore@global.demo`
+- `admin@global.demo`, `indiranagar@global.demo`, or `whitefield@global.demo`
 - Password for all test accounts: `Inventory123!`
 - This is an explicitly client-side demo login, not production authentication or authorization. Test credentials are public. No real sensitive data should be stored here.
 - Branch profiles, transfer handovers, inventory changes and audit demonstrations persist in localStorage in the same browser. Login lasts for the browser tab session. The test users share the same local workspace and are not restricted to branches.
@@ -32,4 +32,6 @@ Calculation: USD per troy ounce × INR/USD ÷ 31.1034768. Gold is scaled by 24K,
 Import the repository root and select the Next.js framework preset. The included `vercel.json` uses Next.js; remove any previous dashboard override for output directory `dist` or blank install/build commands. Use standard `npm install` and `npm run build` defaults, with no custom output directory. Do not deploy only the old `dist` folder.
 
 Product photography is generated illustrative imagery. See `IMAGE-ASSETS.md` for the prompt. Reduced-motion preferences disable decorative motion.
+
+
 
