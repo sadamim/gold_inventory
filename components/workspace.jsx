@@ -41,6 +41,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import { SECTIONS, createSeed, demoUsers, jewellery, jewelleryImage, migrateBranches, migrateJewellery } from "../lib/data.mjs";
+import { mergeApiItems } from "../lib/products.mjs";
 import { dateLabel, dateTime, money, PERIODS, summarizeTransfers } from "../lib/reporting.mjs";
 
 const STORAGE = "global-inventory-next-v2";
@@ -320,7 +321,8 @@ export default function Workspace() {
     [branchView, setBranchView] = useState("all"),
     [period, setPeriod] = useState("yesterday"),
     [reportBranch, setReportBranch] = useState("all"),
-    [storageError, setStorageError] = useState("");
+    [storageError, setStorageError] = useState(""),
+    [catalog, setCatalog] = useState({ state: "loading" });
   const dialogRef = useRef(null),
     toastTimer = useRef(null);
   useEffect(() => {
@@ -346,6 +348,30 @@ export default function Workspace() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
+  // Load the live product catalogue (jewellery, prices and images) through /api/products.
+  async function loadCatalog(refresh = false) {
+    setCatalog((c) => ({ ...c, state: "loading" }));
+    try {
+      const r = await fetch("/api/products" + (refresh ? "?refresh=1" : ""), { cache: "no-store", signal: AbortSignal.timeout(20000) });
+      const body = await r.json();
+      if (!r.ok || !Array.isArray(body.items) || !body.items.length) throw new Error(body.error || "No products");
+      setData((d) =>
+        d
+          ? {
+              ...d,
+              items: mergeApiItems(d.items, body.items),
+              catalog: { source: body.source, fetchedAt: body.fetchedAt, count: body.count },
+            }
+          : d,
+      );
+      setCatalog({ state: body.stale ? "stale" : "live", source: body.source, fetchedAt: body.fetchedAt, count: body.count });
+    } catch {
+      setCatalog({ state: "error" });
+    }
+  }
+  useEffect(() => {
+    if (ready) loadCatalog();
+  }, [ready]);
   useEffect(() => {
     if (!ready || !data) return;
     try {
@@ -668,10 +694,22 @@ export default function Workspace() {
                 </div>
               </td>
               <td>
-                {i.purity ? `${i.purity} · ${Number(i.weight).toFixed(2)} g` : i.variant}
+                {i.source === "api"
+                  ? [i.purity !== "—" ? i.purity : null, i.weight ? `${Number(i.weight).toFixed(2)} g` : null]
+                      .filter(Boolean)
+                      .join(" · ") || "—"
+                  : i.purity
+                    ? `${i.purity} · ${Number(i.weight).toFixed(2)} g`
+                    : i.variant}
                 <small>
-                  1 {String(i.unit).toLowerCase()}
-                  {i.purity ? " · " + String(i.variant).split(" · ").slice(2).join(" · ") : ""}
+                  {i.qty != null ? `Qty ${i.qty}` : `1 ${String(i.unit).toLowerCase()}`}
+                  {i.source === "api"
+                    ? i.sku
+                      ? " · " + i.sku
+                      : ""
+                    : i.purity
+                      ? " · " + String(i.variant).split(" · ").slice(2).join(" · ")
+                      : ""}
                 </small>
               </td>
               <td>
@@ -825,7 +863,7 @@ export default function Workspace() {
           </div>
           <HeaderRates />
           <div className="header-right">
-            <span className="demo-tag">DEMO DATA</span>
+            <span className="demo-tag">{data.catalog ? "LIVE PRODUCTS" : "DEMO DATA"}</span>
             <span className="date-header">{dateLabel(new Date())}</span>
             <span className="avatar">{user.initials}</span>
             <button className="icon-button mobile-logout" onClick={logout} aria-label="Sign out">
@@ -1007,6 +1045,21 @@ export default function Workspace() {
                 </>,
               )}
               {stats}
+              <div className={`notice catalog-notice ${catalog.state}`}>
+                <RefreshCw size={18} className={catalog.state === "loading" ? "spin" : ""} />
+                <span>
+                  {catalog.state === "loading"
+                    ? "Loading products from the product API…"
+                    : catalog.state === "error"
+                      ? data.catalog
+                        ? `Product API unavailable – showing the last saved catalogue (${dateTime(data.catalog.fetchedAt)} IST).`
+                        : "Product API unavailable – showing demo jewellery data."
+                      : `Live catalogue: ${catalog.count} products from ${catalog.source} · updated ${dateTime(catalog.fetchedAt)} IST${catalog.state === "stale" ? " (last successful load)" : ""}.`}
+                </span>
+                <button className="text-button" onClick={() => loadCatalog(true)} disabled={catalog.state === "loading"}>
+                  Refresh
+                </button>
+              </div>
               <Panel title="Item inventory" sub={`${filteredItems.length} matching items`}>
                 <div className="toolbar">
                   <label className="search-field">
@@ -1028,7 +1081,7 @@ export default function Workspace() {
                   </select>
                   <select aria-label="Inventory status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                     <option value="all">All statuses</option>
-                    {["Available", "Reserved", "In transit", "Quarantine"].map((s) => (
+                    {["Available", "Out of stock", "Reserved", "In transit", "Quarantine"].map((s) => (
                       <option key={s}>{s}</option>
                     ))}
                   </select>
@@ -1543,6 +1596,7 @@ export default function Workspace() {
         <>
           <Photo item={i} large />
           <h2>{i.name}</h2>
+          {i.description && <p className="muted item-description">{i.description}</p>}
           <p className="muted">
             {i.id} · {i.category}
           </p>
@@ -1552,11 +1606,17 @@ export default function Workspace() {
               ["Category", i.category],
               ["Purity", i.purity || "—"],
               ["Weight", i.weight ? Number(i.weight).toFixed(2) + " g" : "—"],
-              ["Design details", String(i.variant).split(" · ").slice(2).join(" · ") || i.variant],
+              ["Design details", i.source === "api" ? i.variant : String(i.variant).split(" · ").slice(2).join(" · ") || i.variant],
               ["Stock unit", i.unit],
               ["Stock count", i.status === "In transit" ? 0 : 1],
               ["Available in this branch", i.status === "Available" ? "1 unit" : "0 units"],
               ["Branch", branchName(i.branchId)],
+              ...(i.source === "api"
+                ? [
+                    ["SKU", i.sku || i.id],
+                    ["Quantity in stock", i.qty ?? "—"],
+                  ]
+                : []),
               ["Ownership", i.owner],
               ["Sample value", money(i.value)],
               ["Original stock age", i.age + " days"],

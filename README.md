@@ -36,3 +36,12 @@ Jewellery images are bundled SVG illustrations in `public/assets/jewellery/`. Ea
 ## User section access
 
 In **Users**, create a user with an email and password and tick the sidebar sections they may see (Dashboard, Stock, Branches, etc.). Role presets fill the ticks quickly. The user can then sign in, sees only those sections, and blocked pages cannot be opened by link. This is browser-local demo access control, not production security.
+
+## Product API
+
+Stock items, prices and images load from the Muliya product API through the server route `/api/products`
+(source: `https://muliya-dev-six.vercel.app/api/product/allProduct?lang=1`, cached 5 minutes). Mapping lives in
+`lib/products.mjs`. To use another environment, set `PRODUCTS_API_URL` (and `PRODUCTS_API_TOKEN` if it needs a
+bearer token) in `.env.local` or Vercel. If the API is unreachable, the last loaded catalogue (or the demo jewellery)
+is shown. The API has no branch field, so products start at the first branch; local reservations, transfers and
+branch moves are kept across refreshes.

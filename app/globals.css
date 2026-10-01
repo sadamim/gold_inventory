@@ -128,3 +128,5 @@ form label.section-option input{width:16px;height:16px;margin:0;accent-color:#2b
 .jobs-table td.wrap{min-width:170px;max-width:240px}
 .jobs-table .next-step{padding:8px 11px;font-size:11px;white-space:nowrap}
 .jobs-table td,.jobs-table th{padding-inline:14px}
+.catalog-notice{align-items:center}.catalog-notice span{flex:1}.catalog-notice.error{background:#fff6e8;border-color:#f1dfbd;color:#8a6a2c}.catalog-notice .text-button{padding:4px 8px}
+.item-description{font-size:12px;line-height:1.6;white-space:pre-line}

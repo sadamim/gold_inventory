@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Box, Package } from "lucide-react";
 
 const AMBER = /Reserved|Pending|transit|Deposit|Review|With service|Inspection|Short|Overdue|Checking|workshop|Partly|Not listed/i;
-const RED = /Quarantine|Mismatch|unavailable|Rejected|Late/i;
+const RED = /Out of stock|Quarantine|Mismatch|unavailable|Rejected|Late/i;
 const NEUTRAL = /Cancelled|Demo|Completed|Delivered|Hidden/i;
 
 export function Badge({ children, tone }) {
