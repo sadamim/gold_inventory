@@ -25,13 +25,14 @@ Reports use **previous complete calendar periods in Asia/Kolkata**: yesterday, l
 
 The Next.js `/api/metals` endpoint requests gold and silver spot quotes from [Gold API](https://gold-api.com/) and the working-day USD/INR reference rate from [Frankfurter](https://frankfurter.dev/v1/). No API key is needed for these public feeds. Successful results are cached for 60 seconds per server instance. Requests time out; malformed responses are rejected. On failure, a previous result up to 24 hours old is explicitly marked stale, or the interface shows unavailable. There are no invented price fallbacks.
 
-Calculation: USD per troy ounce × INR/USD ÷ 31.1034768. Gold is scaled by 24K, 22K, 18K and 14K purity ratios; silver by 999 and 925 fineness. Prices are INR per gram, **indicative spot-based estimates**, not Indian local retail quotes. Taxes, import duties, premiums and making charges are excluded. Source timestamps and FX date are displayed; data older than 15 minutes is marked delayed. FX is a daily reference, not live intraday FX. Public feed availability is outside the app's control.
+Calculation: USD per troy ounce × INR/USD ÷ 31.1034768. Gold is scaled by 24K, 22K and 18K purity ratios; these three rates are shown in the top header bar. Prices are INR per gram, **indicative spot-based estimates**, not Indian local retail quotes. Taxes, import duties, premiums and making charges are excluded. Source timestamps and FX date are displayed; data older than 15 minutes is marked delayed. FX is a daily reference, not live intraday FX. Public feed availability is outside the app's control.
 
 ## Vercel
 
 Import the repository root and select the Next.js framework preset. The included `vercel.json` uses Next.js; remove any previous dashboard override for output directory `dist` or blank install/build commands. Use standard `npm install` and `npm run build` defaults, with no custom output directory. Do not deploy only the old `dist` folder.
 
-Product photography is generated illustrative imagery. See `IMAGE-ASSETS.md` for the prompt. Reduced-motion preferences disable decorative motion.
+Jewellery images are bundled SVG illustrations in `public/assets/jewellery/`. Each stock item has an `image` field; set it to any image URL (for example one stored with the product record) to show a real photo. See `IMAGE-ASSETS.md`. Reduced-motion preferences disable decorative motion.
 
+## User section access
 
-
+In **Users**, create a user with an email and password and tick the sidebar sections they may see (Dashboard, Stock, Branches, etc.). Role presets fill the ticks quickly. The user can then sign in, sees only those sections, and blocked pages cannot be opened by link. This is browser-local demo access control, not production security.
