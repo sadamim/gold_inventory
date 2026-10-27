@@ -39,9 +39,9 @@ export function Empty({ children }) {
   );
 }
 
-export function Panel({ title, sub, action, children, className = "" }) {
+export function Panel({ title, sub, action, children, className = "", compact = false }) {
   return (
-    <section className={`panel ${className}`}>
+    <section className={`panel${compact ? " panel-compact" : ""} ${className}`.trim()}>
       <div className="panel-title">
         <div>
           <h2>{title}</h2>
@@ -54,15 +54,15 @@ export function Panel({ title, sub, action, children, className = "" }) {
   );
 }
 
-export function Metric({ label, value, sub, icon: Icon = Box, tone = "" }) {
+export function Metric({ label, value, sub, icon: Icon = Box, tone = "", compact = false }) {
   return (
-    <div className={`metric ${tone}`}>
+    <div className={`metric ${tone}${compact ? " compact" : ""}`} title={compact && sub ? sub : undefined}>
       <div className="metric-label">
         {label}
-        <Icon size={17} />
+        <Icon size={compact ? 14 : 17} />
       </div>
       <strong>{value}</strong>
-      <p>{sub}</p>
+      {!compact && sub ? <p>{sub}</p> : null}
     </div>
   );
 }

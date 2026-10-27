@@ -1,4 +1,4 @@
-# Inventory Nexus
+# Inventory IMS
 
 A Next.js / React prototype for general inventory, branch records, transfers, reservations and reporting.
 

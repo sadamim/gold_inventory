@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { periodRange, summarizeTransfers, isWithin } from '../lib/reporting.mjs';
+import { periodRange, summarizeTransfers, isWithin, calendarRangeInclusive, toCalendarDateIST } from '../lib/reporting.mjs';
 import { createSeed } from '../lib/data.mjs';
 test('Yesterday follows IST midnight, including a UTC date boundary',()=>{
  assert.deepEqual(periodRange('yesterday',new Date('2026-09-18T21:00:00Z')),{start:'2026-09-17T18:30:00.000Z',end:'2026-09-18T18:30:00.000Z'});
@@ -15,6 +15,13 @@ test('Month and year boundaries handle leap years and January',()=>{
 test('Report ranges include start and exclude end',()=>{
  const r=periodRange('yesterday',new Date('2026-09-19T08:00:00Z'));
  assert.equal(isWithin(r.start,r),true);assert.equal(isWithin(r.end,r),false);assert.equal(isWithin(null,r),false);
+});
+test('Calendar date inputs map to inclusive IST day ranges',()=>{
+ const r=calendarRangeInclusive('2026-09-17','2026-09-18');
+ assert.equal(toCalendarDateIST(r.start),'2026-09-17');
+ assert.equal(toCalendarDateIST(new Date(Date.parse(r.end)-1)),'2026-09-18');
+ assert.equal(isWithin('2026-09-17T20:00:00Z',r),true);
+ assert.equal(isWithin('2026-09-19T00:00:00Z',r),false);
 });
 test('Branch reports use independent dispatch and receipt times, and deduplicate network transfers',()=>{
  const now=new Date('2026-09-19T08:00:00Z'),branches=[{id:'A'},{id:'B'}];

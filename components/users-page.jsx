@@ -143,30 +143,36 @@ export default function UsersPage({ data, user, update, notify }) {
   return (
     <>
       <div className="page-heading">
-        <div>
-          <div className="eyebrow">INVENTORY NEXUS / USERS</div>
-          <h1>Users</h1>
-          <p>Create users, assign their branch and choose which sidebar sections each person can see.</p>
+        <div className="page-heading-main">
+          <div className="eyebrow">INVENTORY IMS / USERS</div>
+          <div className="page-title-metrics">
+            <div className="page-title-copy">
+              <h1>Users</h1>
+              <p>Create users, assign their branch and choose which sidebar sections each person can see.</p>
+            </div>
+            <div className="metrics metrics-inline user-summary-metrics">
+              {[
+                ["Users", staff.length],
+                ["Active", staff.filter((s) => s.status === "Active").length],
+                ["Limited access", staff.filter((s) => (s.pages || ALL_SECTIONS).length < ALL_SECTIONS.length).length],
+              ].map(([label, value]) => (
+                <div className="metric compact" key={label}>
+                  <div className="metric-label">{label}</div>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <button className="primary" onClick={() => open({ role: "Branch operator" })}>
-          Add user
-        </button>
+        <div className="heading-actions">
+          <button className="primary" onClick={() => open({ role: "Branch operator" })}>
+            Add user
+          </button>
+        </div>
       </div>
-      <div className="notice">
+      <div className="notice notice-compact">
         Demo access control: settings are stored in this browser only. Use a secure identity provider and server-side permissions before
         using real data.
-      </div>
-      <div className="metrics">
-        {[
-          ["Users", staff.length],
-          ["Active", staff.filter((s) => s.status === "Active").length],
-          ["With limited access", staff.filter((s) => (s.pages || ALL_SECTIONS).length < ALL_SECTIONS.length).length],
-        ].map(([label, value]) => (
-          <div className="panel panel-body" key={label}>
-            <h3>{label}</h3>
-            <h2>{value}</h2>
-          </div>
-        ))}
       </div>
       {editing && (
         <section className="panel">

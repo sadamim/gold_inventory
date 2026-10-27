@@ -3,7 +3,7 @@
 import UsersPage, { allowedSections, loginAccounts } from "./users-page";
 import { CustomerOrders, OnlineStore, ServiceJobs, StockReceivedSheet } from "./operations";
 import { Badge, Empty, Metric, Panel, Photo, csvDownload } from "./ui";
-import StockAlerts from "./stock-alerts";
+import DashboardCharts from "./dashboard-charts";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
@@ -42,7 +42,16 @@ import {
 } from "lucide-react";
 import { SECTIONS, createSeed, demoUsers, jewellery, jewelleryImage, migrateBranches, migrateJewellery } from "../lib/data.mjs";
 import { mergeApiItems } from "../lib/products.mjs";
-import { dateLabel, dateTime, money, PERIODS, summarizeTransfers } from "../lib/reporting.mjs";
+import {
+  calendarRangeInclusive,
+  dateLabel,
+  dateTime,
+  money,
+  PERIODS,
+  periodCalendarDates,
+  periodRange,
+  summarizeTransfers,
+} from "../lib/reporting.mjs";
 
 const STORAGE = "global-inventory-next-v2";
 const ICONS = {
@@ -197,7 +206,7 @@ function Login({ onLogin, accounts }) {
             <Globe2 />
           </span>
           <span>
-            Inventory<small>NEXUS</small>
+            Inventory<small>IMS</small>
           </span>
         </a>
         <div className="story-copy">
@@ -321,6 +330,9 @@ export default function Workspace() {
     [branchView, setBranchView] = useState("all"),
     [period, setPeriod] = useState("yesterday"),
     [reportBranch, setReportBranch] = useState("all"),
+    [reportDateStart, setReportDateStart] = useState(() => periodCalendarDates("yesterday").start),
+    [reportDateEnd, setReportDateEnd] = useState(() => periodCalendarDates("yesterday").end),
+    [reportSort, setReportSort] = useState("dispatch"),
     [storageError, setStorageError] = useState(""),
     [catalog, setCatalog] = useState({ state: "loading" });
   const dialogRef = useRef(null),
@@ -426,17 +438,22 @@ export default function Workspace() {
       };
     });
   }
-  function heading(title, sub, action) {
+  function heading(title, sub, action, metrics) {
     return (
       <div className="page-heading">
-        <div>
+        <div className="page-heading-main">
           <div className="eyebrow">
-            INVENTORY NEXUS <span>/</span> {navigation.find((n) => n[0] === route)?.[1]?.toUpperCase()}
+            INVENTORY IMS <span>/</span> {navigation.find((n) => n[0] === route)?.[1]?.toUpperCase()}
           </div>
-          <h1>{title}</h1>
-          <p>{sub}</p>
+          <div className="page-title-metrics">
+            <div className="page-title-copy">
+              <h1>{title}</h1>
+              <p>{sub}</p>
+            </div>
+            {metrics ? <div className="metrics metrics-inline">{metrics}</div> : null}
+          </div>
         </div>
-        <div className="heading-actions">{action}</div>
+        {action ? <div className="heading-actions">{action}</div> : null}
       </div>
     );
   }
@@ -661,7 +678,19 @@ export default function Workspace() {
     held = data.items.filter((i) => i.status === "Reserved"),
     transit = data.items.filter((i) => i.status === "In transit");
   const totalValue = data.items.filter((i) => i.owner === "Company").reduce((sum, i) => sum + i.value, 0);
-  const report = summarizeTransfers(data.transfers, data.branches, period, reportBranch);
+  const reportRange =
+    reportDateStart && reportDateEnd ? calendarRangeInclusive(reportDateStart, reportDateEnd) : periodRange(period);
+  const report = summarizeTransfers(data.transfers, data.branches, period, reportBranch, new Date(), reportRange);
+  const reportHandovers = [...report.relevant].sort((a, b) => {
+    const pick = (t) => (reportSort === "receipt" ? t.receivedAt || t.sentAt || t.createdAt : t.sentAt || t.receivedAt || t.createdAt);
+    return Date.parse(pick(b) || 0) - Date.parse(pick(a) || 0);
+  });
+  function selectReportPeriod(id) {
+    setPeriod(id);
+    const dates = periodCalendarDates(id);
+    setReportDateStart(dates.start);
+    setReportDateEnd(dates.end);
+  }
   const activeBranch = data.branches.find((b) => b.id === branchView);
   const activeTransfers = data.transfers
     .filter((t) => branchView === "all" || t.from === branchView || t.to === branchView)
@@ -792,13 +821,13 @@ export default function Workspace() {
       {!rows.length && <Empty>No transfer activity in this selection.</Empty>}
     </div>
   );
-  const stats = (
-    <div className="metrics">
-      <Metric label="Registered stock" value={data.items.length} sub={`Across ${data.branches.length} branches`} icon={Package} />
-      <Metric label="Available to sell" value={available.length} sub="Eligible for central reservation" icon={CheckCheck} />
-      <Metric label="Inventory value" value={money(totalValue)} sub="Company-owned · sample INR value" icon={BarChart3} />
-      <Metric label="In transit" value={transit.length} sub="Protected until receipt is confirmed" icon={Truck} tone="accent" />
-    </div>
+  const statMetrics = (
+    <>
+      <Metric compact label="Registered stock" value={data.items.length} sub={`Across ${data.branches.length} branches`} icon={Package} />
+      <Metric compact label="Available to sell" value={available.length} sub="Eligible for central reservation" icon={CheckCheck} />
+      <Metric compact label="Inventory value" value={money(totalValue)} sub="Company-owned · sample INR value" icon={BarChart3} />
+      <Metric compact label="In transit" value={transit.length} sub="Protected until receipt is confirmed" icon={Truck} tone="accent" />
+    </>
   );
 
   return (
@@ -809,7 +838,7 @@ export default function Workspace() {
             <Globe2 />
           </span>
           <span>
-            Inventory<small>NEXUS</small>
+            Inventory<small>IMS</small>
           </span>
         </a>
         <div className="workspace-label">OPERATIONS WORKSPACE</div>
@@ -881,7 +910,7 @@ export default function Workspace() {
             <>
               {heading(
                 "Dashboard",
-                "See total stock, available items and recent transfers at a glance.",
+                "Overview metrics, featured stock and branch activity.",
                 <>
                   <button onClick={() => go("reports")}>
                     <BarChart3 size={16} /> View reports
@@ -890,21 +919,9 @@ export default function Workspace() {
                     <Plus size={17} /> New transfer
                   </button>
                 </>,
+                statMetrics,
               )}
-              {stats}
-              <StockAlerts
-                data={data}
-                onOrders={() => go("reservations")}
-                update={update}
-                onBranch={(id) => {
-                  setLocationFilter(id);
-                  setStatusFilter("all");
-                  setSearch("");
-                  go("inventory");
-                }}
-                onItem={showItem}
-                onTransfer={(id) => setDialog({ type: "transfer", id })}
-              />
+              <DashboardCharts data={data} />
               <div className="feature-heading">
                 <div>
                   <h2>Your collection, connected.</h2>
@@ -1043,27 +1060,49 @@ export default function Workspace() {
                     <Plus size={17} /> New order
                   </button>
                 </>,
+                statMetrics,
               )}
-              {stats}
-              <div className={`notice catalog-notice ${catalog.state}`}>
-                <RefreshCw size={18} className={catalog.state === "loading" ? "spin" : ""} />
-                <span>
-                  {catalog.state === "loading"
-                    ? "Loading products from the product API…"
-                    : catalog.state === "error"
-                      ? data.catalog
-                        ? `Product API unavailable – showing the last saved catalogue (${dateTime(data.catalog.fetchedAt)} IST).`
-                        : "Product API unavailable – showing demo jewellery data."
-                      : `Live catalogue: ${catalog.count} products from ${catalog.source} · updated ${dateTime(catalog.fetchedAt)} IST${catalog.state === "stale" ? " (last successful load)" : ""}.`}
-                </span>
-                <button className="text-button" onClick={() => loadCatalog(true)} disabled={catalog.state === "loading"}>
-                  Refresh
-                </button>
-              </div>
-              <Panel title="Item inventory" sub={`${filteredItems.length} matching items`}>
-                <div className="toolbar">
+              <Panel
+                compact
+                className="inventory-panel"
+                title="Item inventory"
+                sub={(() => {
+                  const stockN = data.items.filter(
+                    (i) => (locationFilter === "all" || i.branchId === locationFilter) && i.status !== "In transit",
+                  ).length;
+                  const availN = available.filter((i) => locationFilter === "all" || i.branchId === locationFilter).length;
+                  let cat = "Loading catalogue…";
+                  if (catalog.state === "error") {
+                    cat = data.catalog ? "Saved catalogue · API unavailable" : "Demo catalogue";
+                  } else if (catalog.state !== "loading") {
+                    let host = catalog.source || "demo";
+                    try {
+                      host = new URL(host.startsWith("http") ? host : `https://${host}`).hostname;
+                    } catch {
+                      host = String(host).slice(0, 28);
+                    }
+                    const when = catalog.fetchedAt
+                      ? new Intl.DateTimeFormat("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "numeric",
+                          minute: "2-digit",
+                          timeZone: "Asia/Kolkata",
+                        }).format(new Date(catalog.fetchedAt))
+                      : "—";
+                    cat = `Live ${catalog.count} · ${host} · ${when} IST${catalog.state === "stale" ? " · cached" : ""}`;
+                  }
+                  return `${filteredItems.length} matches · Stock ${stockN} · Available ${availN} · ${cat}`;
+                })()}
+                action={
+                  <button className="text-button" onClick={() => loadCatalog(true)} disabled={catalog.state === "loading"}>
+                    <RefreshCw size={14} className={catalog.state === "loading" ? "spin" : ""} /> Refresh
+                  </button>
+                }
+              >
+                <div className="toolbar toolbar-compact toolbar-flush">
                   <label className="search-field">
-                    <Search size={17} />
+                    <Search size={14} />
                     <input
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
@@ -1095,20 +1134,6 @@ export default function Workspace() {
                     Reset
                   </button>
                 </div>
-                <div className="notice">
-                  <Package size={18} />
-                  <span>
-                    Stock count:{" "}
-                    <b>
-                      {
-                        data.items.filter((i) => (locationFilter === "all" || i.branchId === locationFilter) && i.status !== "In transit")
-                          .length
-                      }
-                    </b>{" "}
-                    · {locationFilter === "all" ? "Available across all branches" : "Available in this branch"}:{" "}
-                    <b>{available.filter((i) => locationFilter === "all" || i.branchId === locationFilter).length}</b>
-                  </span>
-                </div>
                 <ItemTable items={filteredItems} />
               </Panel>
             </>
@@ -1121,42 +1146,28 @@ export default function Workspace() {
                 <button className="primary" onClick={() => setDialog({ type: "newBranch" })}>
                   <Plus size={17} /> Add branch
                 </button>,
-              )}
-              <div className="branch-grid">
-                {data.branches.map((b) => {
-                  const stock = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit");
-                  return (
-                    <button
-                      className={`branch-card ${branchView === b.id ? "selected" : ""}`}
-                      key={b.id}
-                      onClick={() => setBranchView(b.id)}
-                    >
-                      <div className="branch-card-top">
+                <div className="branch-picker-inline">
+                  {data.branches.map((b) => {
+                    const stock = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit");
+                    const avail = stock.filter((i) => i.status === "Available").length;
+                    return (
+                      <button
+                        type="button"
+                        className={`branch-chip ${branchView === b.id ? "active" : ""}`}
+                        key={b.id}
+                        onClick={() => setBranchView(b.id)}
+                        aria-pressed={branchView === b.id}
+                      >
                         <span className={"branch-monogram " + b.tone}>{b.code}</span>
-                        <ArrowUpRight size={19} />
-                      </div>
-                      <h2>{b.name}</h2>
-                      <p>
-                        {b.country} · {b.type}
-                      </p>
-                      <div className="branch-manager">
-                        <Users size={14} />
-                        {b.manager}
-                      </div>
-                      <div className="branch-card-stats">
-                        <div>
-                          <b>{stock.length}</b>
-                          <span>Stock count</span>
-                        </div>
-                        <div>
-                          <b>{stock.filter((i) => i.status === "Available").length}</b>
-                          <span>Available in this branch</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        <span className="branch-chip-name">{b.name}</span>
+                        <span className="branch-chip-stats">
+                          {stock.length} · {avail} avail
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>,
+              )}
               <Panel
                 title={activeBranch ? `${activeBranch.name} · Branch records` : "All branch records"}
                 sub="Handover times displayed in India Standard Time (IST)"
@@ -1204,28 +1215,31 @@ export default function Workspace() {
                 <button className="primary" onClick={() => setDialog({ type: "newTransfer" })}>
                   <Plus size={17} /> Request transfer
                 </button>,
+                <>
+                  <Metric
+                    compact
+                    label="Awaiting dispatch"
+                    value={data.transfers.filter((t) => t.status === "Requested").length}
+                    sub="Stock remains at the source branch"
+                    icon={Package}
+                  />
+                  <Metric
+                    compact
+                    label="On the move"
+                    value={data.transfers.filter((t) => t.status === "In transit").length}
+                    sub="Sender and dispatch time recorded"
+                    icon={Truck}
+                    tone="accent"
+                  />
+                  <Metric
+                    compact
+                    label="Confirmed handovers"
+                    value={data.transfers.filter((t) => t.status === "Received").length}
+                    sub="Includes historical demo records"
+                    icon={CheckCheck}
+                  />
+                </>,
               )}
-              <div className="metrics three">
-                <Metric
-                  label="Awaiting dispatch"
-                  value={data.transfers.filter((t) => t.status === "Requested").length}
-                  sub="Stock remains at the source branch"
-                  icon={Package}
-                />
-                <Metric
-                  label="On the move"
-                  value={data.transfers.filter((t) => t.status === "In transit").length}
-                  sub="Sender and dispatch time recorded"
-                  icon={Truck}
-                  tone="accent"
-                />
-                <Metric
-                  label="Confirmed handovers"
-                  value={data.transfers.filter((t) => t.status === "Received").length}
-                  sub="Includes historical demo records"
-                  icon={CheckCheck}
-                />
-              </div>
               <div className="journey">
                 <span>
                   <span>01</span> Request
@@ -1295,53 +1309,77 @@ export default function Workspace() {
                 >
                   <Download size={16} /> Export report
                 </button>,
+                <>
+                  <Metric
+                    compact
+                    label="Unique transfers"
+                    value={report.uniqueTransfers}
+                    sub="Counted once across the selected network"
+                    icon={ArrowLeftRight}
+                  />
+                  <Metric compact label="Units dispatched" value={report.sent} sub="By dispatch timestamp" icon={ArrowUpRight} />
+                  <Metric compact label="Units received" value={report.received} sub="By receipt timestamp" icon={ArrowDownLeft} />
+                  <Metric
+                    compact
+                    label="Dispatched value"
+                    value={money(report.value)}
+                    sub="Sample INR values · not sales revenue"
+                    icon={BarChart3}
+                    tone="accent"
+                  />
+                </>,
               )}
               <div className="report-controls">
                 <div className="segmented">
                   {Object.entries(PERIODS).map(([id, label]) => (
-                    <button aria-pressed={period === id} className={period === id ? "active" : ""} onClick={() => setPeriod(id)} key={id}>
+                    <button
+                      aria-pressed={period === id}
+                      className={period === id ? "active" : ""}
+                      onClick={() => selectReportPeriod(id)}
+                      key={id}
+                    >
                       {label}
                     </button>
                   ))}
                 </div>
-                <select aria-label="Report branch" value={reportBranch} onChange={(e) => setReportBranch(e.target.value)}>
-                  <option value="all">All branches</option>
-                  {data.branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="period-label">
-                <Clock3 size={14} /> {dateLabel(report.range.start)} — {dateLabel(new Date(Date.parse(report.range.end) - 1))}{" "}
-                <span>
-                  IST ·{" "}
-                  {period === "week"
-                    ? "Previous Monday–Sunday"
-                    : period === "year"
-                      ? "Previous calendar year"
-                      : period === "month"
-                        ? "Previous calendar month"
-                        : "Previous calendar day"}
-                </span>
-              </div>
-              <div className="metrics">
-                <Metric
-                  label="Unique transfers"
-                  value={report.uniqueTransfers}
-                  sub="Counted once across the selected network"
-                  icon={ArrowLeftRight}
-                />
-                <Metric label="Units dispatched" value={report.sent} sub="By dispatch timestamp" icon={ArrowUpRight} />
-                <Metric label="Units received" value={report.received} sub="By receipt timestamp" icon={ArrowDownLeft} />
-                <Metric
-                  label="Dispatched value"
-                  value={money(report.value)}
-                  sub="Sample INR values · not sales revenue"
-                  icon={BarChart3}
-                  tone="accent"
-                />
+                <div className="report-filters">
+                  <select aria-label="Report branch" value={reportBranch} onChange={(e) => setReportBranch(e.target.value)}>
+                    <option value="all">All branches</option>
+                    {data.branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="report-date-field">
+                    <span>From</span>
+                    <input
+                      type="date"
+                      aria-label="Report start date"
+                      value={reportDateStart}
+                      max={reportDateEnd}
+                      onChange={(e) => setReportDateStart(e.target.value)}
+                    />
+                  </label>
+                  <label className="report-date-field">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      aria-label="Report end date"
+                      value={reportDateEnd}
+                      min={reportDateStart}
+                      onChange={(e) => setReportDateEnd(e.target.value)}
+                    />
+                  </label>
+                  <select aria-label="Sort handovers by date" value={reportSort} onChange={(e) => setReportSort(e.target.value)}>
+                    <option value="dispatch">Sort: dispatch date</option>
+                    <option value="receipt">Sort: receipt date</option>
+                  </select>
+                  <span className="report-sort-note">
+                    <Clock3 size={13} aria-hidden />
+                    {dateLabel(report.range.start)} – {dateLabel(new Date(Date.parse(report.range.end) - 1))} · IST
+                  </span>
+                </div>
               </div>
               <div className="two-col report-layout">
                 <Panel title="Branch movement comparison" sub="Units sent and received in the selected period">
@@ -1450,7 +1488,7 @@ export default function Workspace() {
                           "Receipt time UTC",
                           "Status",
                         ],
-                        ...report.relevant.map((t) => [
+                        ...reportHandovers.map((t) => [
                           t.id,
                           t.itemName,
                           branchName(t.from),
@@ -1468,7 +1506,7 @@ export default function Workspace() {
                   </button>
                 }
               >
-                <TransferTable rows={report.relevant} />
+                <TransferTable rows={reportHandovers} />
               </Panel>
             </>
           )}
@@ -1551,7 +1589,7 @@ export default function Workspace() {
         </main>
         <footer>
           <span>
-            Inventory Nexus <i>Operations, beautifully connected.</i>
+            Inventory IMS <i>Operations, beautifully connected.</i>
           </span>
           <span>Demo accounts & stock · Browser-local records · Metal rates from external feeds</span>
         </footer>
@@ -1564,7 +1602,7 @@ export default function Workspace() {
         }}
       >
         <div className="dialog-header">
-          <span className="eyebrow">INVENTORY NEXUS</span>
+          <span className="eyebrow">INVENTORY IMS</span>
           <button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog">
             <X size={21} />
           </button>

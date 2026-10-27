@@ -232,24 +232,38 @@ export function StockReceivedSheet({ data, update, notify, heading, branchName }
             <Plus size={17} /> Add row
           </button>
         </>,
+        <>
+          <Metric
+            compact
+            label="Deliveries"
+            value={rows.length}
+            sub={`${rows.filter((r) => r.status === "Pending check").length} waiting for check`}
+            icon={Package}
+          />
+          <Metric
+            compact
+            label="Pieces received"
+            value={rows.reduce((s, r) => s + num(r.pcs), 0)}
+            sub="All rows in the sheet"
+            icon={ArrowDownLeft}
+          />
+          <Metric
+            compact
+            label="Net weight"
+            value={grams(rows.reduce((s, r) => s + num(r.net), 0))}
+            sub="Net gold weight"
+            icon={BarChart3}
+          />
+          <Metric
+            compact
+            label="Purchase value"
+            value={money(rows.reduce((s, r) => s + amountOf(r), 0))}
+            sub="Net weight × rate per gram"
+            icon={CheckCheck}
+            tone="accent"
+          />
+        </>,
       )}
-      <div className="metrics">
-        <Metric
-          label="Deliveries"
-          value={rows.length}
-          sub={`${rows.filter((r) => r.status === "Pending check").length} waiting for check`}
-          icon={Package}
-        />
-        <Metric label="Pieces received" value={rows.reduce((s, r) => s + num(r.pcs), 0)} sub="All rows in the sheet" icon={ArrowDownLeft} />
-        <Metric label="Net weight" value={grams(rows.reduce((s, r) => s + num(r.net), 0))} sub="Net gold weight" icon={BarChart3} />
-        <Metric
-          label="Purchase value"
-          value={money(rows.reduce((s, r) => s + amountOf(r), 0))}
-          sub="Net weight × rate per gram"
-          icon={CheckCheck}
-          tone="accent"
-        />
-      </div>
       <Panel
         title="Stock received sheet"
         sub={dirty ? "You have unsaved changes" : `${visible.length} of ${rows.length} rows · Saved`}
@@ -453,29 +467,32 @@ export function CustomerOrders({ data, heading, setDialog, showItem }) {
             <Plus size={17} /> New order
           </button>
         </>,
+        <>
+          <Metric compact label="Open orders" value={open.length} sub={`${orders.length - open.length} cancelled`} icon={ShoppingBag} />
+          <Metric
+            compact
+            label="Payment pending"
+            value={open.filter((o) => o.state === "Payment pending").length}
+            sub="No advance received yet"
+            icon={Clock3}
+          />
+          <Metric
+            compact
+            label="Advance collected"
+            value={money(open.reduce((s, o) => s + o.advance, 0))}
+            sub="Across open orders"
+            icon={CheckCheck}
+          />
+          <Metric
+            compact
+            label="Balance due"
+            value={money(open.reduce((s, o) => s + o.balance, 0))}
+            sub="To collect at delivery"
+            icon={BarChart3}
+            tone="accent"
+          />
+        </>,
       )}
-      <div className="metrics">
-        <Metric label="Open orders" value={open.length} sub={`${orders.length - open.length} cancelled`} icon={ShoppingBag} />
-        <Metric
-          label="Payment pending"
-          value={open.filter((o) => o.state === "Payment pending").length}
-          sub="No advance received yet"
-          icon={Clock3}
-        />
-        <Metric
-          label="Advance collected"
-          value={money(open.reduce((s, o) => s + o.advance, 0))}
-          sub="Across open orders"
-          icon={CheckCheck}
-        />
-        <Metric
-          label="Balance due"
-          value={money(open.reduce((s, o) => s + o.balance, 0))}
-          sub="To collect at delivery"
-          icon={BarChart3}
-          tone="accent"
-        />
-      </div>
       <Panel title="Orders" sub={`${rows.length} of ${orders.length} orders`}>
         <div className="toolbar">
           <label className="search-field">
@@ -637,28 +654,30 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
         <button className="primary" onClick={() => setDialog({ type: "sync" })}>
           <RefreshCw size={16} /> Reconcile now
         </button>,
+        <>
+          <Metric compact label="Listed online" value={rows.filter((r) => r.listed).length} sub={`of ${rows.length} stock items`} icon={Globe2} />
+          <Metric
+            compact
+            label="Can be bought now"
+            value={rows.filter((r) => r.listed && r.central).length}
+            sub="Listed and available in a branch"
+            icon={CheckCheck}
+          />
+          <Metric compact label="Hidden" value={rows.filter((r) => !r.listed).length} sub="Not shown on the website" icon={ShieldCheck} />
+          <Metric
+            compact
+            label="Mismatches"
+            value={rows.filter((r) => r.sync === "Mismatch").length}
+            sub="Website differs from branch stock"
+            icon={RefreshCw}
+            tone="accent"
+          />
+        </>,
       )}
-      <div className="metrics">
-        <Metric label="Listed online" value={rows.filter((r) => r.listed).length} sub={`of ${rows.length} stock items`} icon={Globe2} />
-        <Metric
-          label="Can be bought now"
-          value={rows.filter((r) => r.listed && r.central).length}
-          sub="Listed and available in a branch"
-          icon={CheckCheck}
-        />
-        <Metric label="Hidden" value={rows.filter((r) => !r.listed).length} sub="Not shown on the website" icon={ShieldCheck} />
-        <Metric
-          label="Mismatches"
-          value={rows.filter((r) => r.sync === "Mismatch").length}
-          sub="Website differs from branch stock"
-          icon={RefreshCw}
-          tone="accent"
-        />
-      </div>
-      <Panel title="Website listings" sub={`${visible.length} items`}>
-        <div className="toolbar">
+      <Panel compact title="Website listings" sub={`${visible.length} items`}>
+        <div className="toolbar toolbar-compact">
           <label className="search-field">
-            <Search size={17} />
+            <Search size={15} />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -812,14 +831,52 @@ export function ServiceJobs({ data, update, notify, heading, branchName }) {
     notify(`${job.id} created. Give the customer this job number as their receipt.`);
   }
 
+  const openJobCount = jobs.filter((j) => !isDone(j) && (type === "all" || j.type === type)).length;
+  const lateJobCount = jobs.filter((j) => isLate(j) && (type === "all" || j.type === type)).length;
+  const stageFilters = (
+    <div className="stage-board-inline" role="tablist" aria-label="Filter by stage">
+      <button type="button" role="tab" aria-selected={stage === "open"} className={stage === "open" ? "active" : ""} onClick={() => setStage("open")}>
+        <span>Open</span>
+        <b>{openJobCount}</b>
+      </button>
+      {STAGES.default.map((label, s) => (
+        <button
+          type="button"
+          role="tab"
+          key={label}
+          aria-selected={stage === String(s)}
+          className={stage === String(s) ? "active" : ""}
+          onClick={() => setStage(String(s))}
+        >
+          <span>
+            <i>{s + 1}</i>
+            {s === 4 ? "Closed" : label.replace("In workshop", "Workshop").replace("Ready for pickup", "Ready")}
+          </span>
+          <b>{counts[s]}</b>
+        </button>
+      ))}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={stage === "late"}
+        className={`late ${stage === "late" ? "active" : ""}`}
+        onClick={() => setStage("late")}
+      >
+        <span>Late</span>
+        <b>{lateJobCount}</b>
+      </button>
+    </div>
+  );
+
   return (
     <>
       {heading(
         "Repair & Return Jobs",
-        "Every jewellery item a customer leaves with you – what needs doing, where it is now and when it is promised.",
+        "Track customer items, promised dates and workshop progress.",
         <button className="primary" onClick={() => setAdding(!adding)}>
           <Plus size={17} /> New job
         </button>,
+        stageFilters,
       )}
       {adding && (
         <Panel
@@ -885,39 +942,10 @@ export function ServiceJobs({ data, update, notify, heading, branchName }) {
           </form>
         </Panel>
       )}
-      <div className="stage-board" role="tablist" aria-label="Filter by stage">
-        <button role="tab" aria-selected={stage === "open"} className={stage === "open" ? "active" : ""} onClick={() => setStage("open")}>
-          <span>Open jobs</span>
-          <b>{jobs.filter((j) => !isDone(j) && (type === "all" || j.type === type)).length}</b>
-        </button>
-        {STAGES.default.map((label, s) => (
-          <button
-            role="tab"
-            key={label}
-            aria-selected={stage === String(s)}
-            className={stage === String(s) ? "active" : ""}
-            onClick={() => setStage(String(s))}
-          >
-            <span>
-              <i>{s + 1}</i> {s === 4 ? "Delivered / closed" : label}
-            </span>
-            <b>{counts[s]}</b>
-          </button>
-        ))}
-        <button
-          role="tab"
-          aria-selected={stage === "late"}
-          className={`late ${stage === "late" ? "active" : ""}`}
-          onClick={() => setStage("late")}
-        >
-          <span>Past promised date</span>
-          <b>{jobs.filter((j) => isLate(j) && (type === "all" || j.type === type)).length}</b>
-        </button>
-      </div>
-      <Panel title="Jobs" sub={`${rows.length} job${rows.length === 1 ? "" : "s"} shown`}>
-        <div className="toolbar">
+      <Panel compact className="jobs-panel" title="Jobs" sub={`${rows.length} shown`}>
+        <div className="toolbar toolbar-compact toolbar-flush">
           <label className="search-field">
-            <Search size={17} />
+            <Search size={14} />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
