@@ -4,10 +4,10 @@ import { Panel } from "./ui";
 import { money } from "../lib/reporting.mjs";
 
 const STATUS_COLORS = {
-  Available: "#397b79",
-  Reserved: "#99b8d3",
-  "In transit": "#91b7a5",
-  Quarantine: "#d4c4a8",
+  Available: "#1e4a7a",
+  Reserved: "#7a96b8",
+  "In transit": "#5a7eab",
+  Quarantine: "#a8b4c4",
 };
 
 function conicGradient(segments) {

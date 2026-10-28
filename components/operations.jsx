@@ -624,9 +624,12 @@ export function CustomerOrders({ data, heading, setDialog, showItem }) {
 /* ------------------------------------------------------------------ */
 /* Online store – table                                                 */
 /* ------------------------------------------------------------------ */
+const ONLINE_PAGE_SIZE = 10;
+
 export function OnlineStore({ data, update, notify, heading, setDialog, branchName, showItem }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(0);
   const rows = data.items.map((i) => {
     const listed = data.online?.[i.id]?.listed ?? i.owner === "Company";
     const central = i.status === "Available" ? 1 : 0;
@@ -639,6 +642,17 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
       (filter === "all" || (filter === "listed" ? r.listed : filter === "hidden" ? !r.listed : r.sync === "Mismatch")) &&
       matches(`${r.name} ${r.id} ${r.category}`, query),
   );
+  const pageCount = Math.max(1, Math.ceil(visible.length / ONLINE_PAGE_SIZE));
+  const pageSafe = Math.min(page, pageCount - 1);
+  const paged = visible.slice(pageSafe * ONLINE_PAGE_SIZE, pageSafe * ONLINE_PAGE_SIZE + ONLINE_PAGE_SIZE);
+  function setListFilter(nextFilter) {
+    setFilter(nextFilter);
+    setPage(0);
+  }
+  function setListQuery(value) {
+    setQuery(value);
+    setPage(0);
+  }
   function toggle(r) {
     update(
       (d) => ({ ...d, online: { ...(d.online || {}), [r.id]: { listed: !r.listed } } }),
@@ -680,7 +694,7 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
             <Search size={15} />
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => setListQuery(e.target.value)}
               placeholder="Search item, category or ID…"
               aria-label="Search listings"
             />
@@ -692,7 +706,12 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
               ["hidden", "Hidden"],
               ["mismatch", "Mismatch"],
             ].map(([id, label]) => (
-              <button key={id} className={filter === id ? "active" : ""} aria-pressed={filter === id} onClick={() => setFilter(id)}>
+              <button
+                key={id}
+                className={filter === id ? "active" : ""}
+                aria-pressed={filter === id}
+                onClick={() => setListFilter(id)}
+              >
                 {label}
               </button>
             ))}
@@ -713,7 +732,7 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
               </tr>
             </thead>
             <tbody>
-              {visible.map((r) => (
+              {paged.map((r) => (
                 <tr key={r.id}>
                   <td>
                     <button className="product-cell link-cell" onClick={() => showItem(r.id)}>
@@ -752,6 +771,38 @@ export function OnlineStore({ data, update, notify, heading, setDialog, branchNa
           </table>
           {!visible.length && <Empty>No listings match your filters.</Empty>}
         </div>
+        {visible.length > 0 && (
+          <div className="table-pager" role="navigation" aria-label="Online store pages">
+            <span>
+              {pageSafe * ONLINE_PAGE_SIZE + 1}–{Math.min((pageSafe + 1) * ONLINE_PAGE_SIZE, visible.length)} of {visible.length}
+            </span>
+            <div className="table-pager-actions">
+              <button type="button" disabled={pageSafe <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                Previous
+              </button>
+              <span className="table-pager-pages">
+                {Array.from({ length: pageCount }, (_, i) => (
+                  <button
+                    type="button"
+                    key={i}
+                    className={i === pageSafe ? "active" : ""}
+                    aria-current={i === pageSafe ? "page" : undefined}
+                    onClick={() => setPage(i)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </span>
+              <button
+                type="button"
+                disabled={pageSafe >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
         <div className="panel-footer">Demo connection: no real website is contacted. Supplier-owned items are hidden by default.</div>
       </Panel>
     </>

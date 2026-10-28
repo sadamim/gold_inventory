@@ -333,8 +333,10 @@ export default function Workspace() {
     [reportDateStart, setReportDateStart] = useState(() => periodCalendarDates("yesterday").start),
     [reportDateEnd, setReportDateEnd] = useState(() => periodCalendarDates("yesterday").end),
     [reportSort, setReportSort] = useState("dispatch"),
+    [inventoryPage, setInventoryPage] = useState(0),
     [storageError, setStorageError] = useState(""),
     [catalog, setCatalog] = useState({ state: "loading" });
+  const INVENTORY_PAGE_SIZE = 10;
   const dialogRef = useRef(null),
     toastTimer = useRef(null);
   useEffect(() => {
@@ -450,7 +452,7 @@ export default function Workspace() {
               <h1>{title}</h1>
               <p>{sub}</p>
             </div>
-            {metrics ? <div className="metrics metrics-inline">{metrics}</div> : null}
+            {metrics ? <div className="heading-aside">{metrics}</div> : null}
           </div>
         </div>
         {action ? <div className="heading-actions">{action}</div> : null}
@@ -674,6 +676,18 @@ export default function Workspace() {
       (locationFilter === "all" || i.branchId === locationFilter) &&
       (statusFilter === "all" || i.status === statusFilter),
   );
+  const inventoryPageCount = Math.max(1, Math.ceil(filteredItems.length / INVENTORY_PAGE_SIZE));
+  const inventoryPageSafe = Math.min(inventoryPage, inventoryPageCount - 1);
+  const pagedItems = filteredItems.slice(
+    inventoryPageSafe * INVENTORY_PAGE_SIZE,
+    inventoryPageSafe * INVENTORY_PAGE_SIZE + INVENTORY_PAGE_SIZE,
+  );
+  function setInventoryFilters(next) {
+    if (next.search !== undefined) setSearch(next.search);
+    if (next.location !== undefined) setLocationFilter(next.location);
+    if (next.status !== undefined) setStatusFilter(next.status);
+    setInventoryPage(0);
+  }
   const available = data.items.filter((i) => i.status === "Available"),
     held = data.items.filter((i) => i.status === "Reserved"),
     transit = data.items.filter((i) => i.status === "In transit");
@@ -1105,12 +1119,16 @@ export default function Workspace() {
                     <Search size={14} />
                     <input
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => setInventoryFilters({ search: e.target.value })}
                       placeholder="Search jewellery, category or ID…"
                       aria-label="Search inventory"
                     />
                   </label>
-                  <select aria-label="Inventory branch" value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                  <select
+                    aria-label="Inventory branch"
+                    value={locationFilter}
+                    onChange={(e) => setInventoryFilters({ location: e.target.value })}
+                  >
                     <option value="all">All branches</option>
                     {data.branches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -1118,7 +1136,11 @@ export default function Workspace() {
                       </option>
                     ))}
                   </select>
-                  <select aria-label="Inventory status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <select
+                    aria-label="Inventory status"
+                    value={statusFilter}
+                    onChange={(e) => setInventoryFilters({ status: e.target.value })}
+                  >
                     <option value="all">All statuses</option>
                     {["Available", "Out of stock", "Reserved", "In transit", "Quarantine"].map((s) => (
                       <option key={s}>{s}</option>
@@ -1129,12 +1151,50 @@ export default function Workspace() {
                       setSearch("");
                       setLocationFilter("all");
                       setStatusFilter("all");
+                      setInventoryPage(0);
                     }}
                   >
                     Reset
                   </button>
                 </div>
-                <ItemTable items={filteredItems} />
+                <ItemTable items={pagedItems} />
+                {filteredItems.length > 0 && (
+                  <div className="table-pager" role="navigation" aria-label="Inventory pages">
+                    <span>
+                      {inventoryPageSafe * INVENTORY_PAGE_SIZE + 1}–
+                      {Math.min((inventoryPageSafe + 1) * INVENTORY_PAGE_SIZE, filteredItems.length)} of {filteredItems.length}
+                    </span>
+                    <div className="table-pager-actions">
+                      <button
+                        type="button"
+                        disabled={inventoryPageSafe <= 0}
+                        onClick={() => setInventoryPage((p) => Math.max(0, p - 1))}
+                      >
+                        Previous
+                      </button>
+                      <span className="table-pager-pages">
+                        {Array.from({ length: inventoryPageCount }, (_, i) => (
+                          <button
+                            type="button"
+                            key={i}
+                            className={i === inventoryPageSafe ? "active" : ""}
+                            aria-current={i === inventoryPageSafe ? "page" : undefined}
+                            onClick={() => setInventoryPage(i)}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={inventoryPageSafe >= inventoryPageCount - 1}
+                        onClick={() => setInventoryPage((p) => Math.min(inventoryPageCount - 1, p + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Panel>
             </>
           )}
