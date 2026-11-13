@@ -1071,40 +1071,6 @@ export default function Workspace() {
                   </div>
                 </Panel>
               </div>
-              <div className="feature-heading">
-                <div>
-                  <h2>Your collection, connected.</h2>
-                  <p>Every piece of jewellery, tracked across your branches.</p>
-                </div>
-                <button className="text-button" onClick={() => go("inventory")}>
-                  Explore inventory <ArrowRight size={16} />
-                </button>
-              </div>
-              <div className="product-grid">
-                {data.items.slice(0, 4).map((i) => (
-                  <button className="product-card" key={i.id} onClick={() => showItem(i.id)}>
-                    <div className="product-cover">
-                      <Photo large item={i} />
-                      <Badge>{i.status}</Badge>
-                      <span className="product-arrow">
-                        <ArrowUpRight size={18} />
-                      </span>
-                    </div>
-                    <div className="product-info">
-                      <span>{i.category}</span>
-                      <h3>{i.name}</h3>
-                      <div>
-                        <small>{branchName(i.branchId)}</small>
-                        <b>{money(i.value)}</b>
-                      </div>
-                      <p className="stock-caption">
-                        Stock count: {i.status === "In transit" ? 0 : 1} · Available in this branch: {i.status === "Available" ? 1 : 0}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="image-note">{data.catalog ? "Product photos and prices from ckcjewellers.com · updated live" : "Illustrative jewellery images · Sample inventory values"}</div>
               <div className="two-col">
                 <Panel
                   title="A network in motion"
@@ -1211,6 +1177,37 @@ export default function Workspace() {
                 </>,
                 statMetrics,
               )}
+              <div className="feature-heading">
+                <div>
+                  <h2>Your collection, connected.</h2>
+                  <p>Every piece of jewellery, tracked across your branches.</p>
+                </div>
+              </div>
+              <div className="product-grid">
+                {data.items.slice(0, 4).map((i) => (
+                  <button className="product-card" key={i.id} onClick={() => showItem(i.id)}>
+                    <div className="product-cover">
+                      <Photo large item={i} />
+                      <Badge>{i.status}</Badge>
+                      <span className="product-arrow">
+                        <ArrowUpRight size={18} />
+                      </span>
+                    </div>
+                    <div className="product-info">
+                      <span>{i.category}</span>
+                      <h3>{i.name}</h3>
+                      <div>
+                        <small>{branchName(i.branchId)}</small>
+                        <b>{money(i.value)}</b>
+                      </div>
+                      <p className="stock-caption">
+                        Stock count: {i.status === "In transit" ? 0 : 1} · Available in this branch: {i.status === "Available" ? 1 : 0}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="image-note">{data.catalog ? "Product photos and prices from ckcjewellers.com · updated live" : "Illustrative jewellery images · Sample inventory values"}</div>
               <Panel
                 compact
                 className="inventory-panel"
