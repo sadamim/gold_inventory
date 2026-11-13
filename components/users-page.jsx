@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { ALL_SECTIONS, ROLE_SECTIONS, SECTIONS, demoUsers } from "../lib/data.mjs";
+import { applySampleData, clearSampleData } from "../lib/sample-data.mjs";
 
 const ROLES = Object.keys(ROLE_SECTIONS);
 const initialsOf = (name) =>
@@ -144,7 +145,7 @@ export default function UsersPage({ data, user, update, notify }) {
     <>
       <div className="page-heading">
         <div className="page-heading-main">
-          <div className="eyebrow">INVENTORY IMS / USERS</div>
+          <div className="eyebrow">CKC INVENTORY / USERS</div>
           <div className="page-title-metrics">
             <div className="page-title-copy">
               <h1>Users</h1>
@@ -295,6 +296,65 @@ export default function UsersPage({ data, user, update, notify }) {
         </div>
         {!rows.length && <p className="panel-body">No users match your search.</p>}
       </section>
+      <SampleDataPanel data={data} update={update} notify={notify} />
     </>
+  );
+}
+
+// Lets an admin rebuild or remove the demo records that sit on top of the live CKC catalogue.
+function SampleDataPanel({ data, update, notify }) {
+  const live = data.items.some((i) => i.source === "api");
+  const count = (list) => (list || []).filter((x) => x.sample).length;
+  const info = data.sampleData?.generatedAt
+    ? `Loaded ${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(data.sampleData.generatedAt))} IST`
+    : data.sampleData?.cleared
+      ? "Sample records cleared"
+      : "Not loaded yet";
+  return (
+    <section className="panel">
+      <div className="panel-title">
+        <div>
+          <h2>Sample data</h2>
+          <p>Demo sales, customer orders, transfers, stock received and repair jobs built on the live CKC products. {info}.</p>
+        </div>
+      </div>
+      <div className="sample-data-grid">
+        {[
+          ["Sales", count(data.sales)],
+          ["Customer orders", count(data.holds)],
+          ["Transfers", count(data.transfers)],
+          ["Stock received", count(data.receipts)],
+          ["Repair & return jobs", count(data.service)],
+        ].map(([label, n]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <b>{n}</b>
+          </div>
+        ))}
+      </div>
+      <div className="dialog-actions sample-data-actions">
+        <button
+          onClick={() => {
+            if (!window.confirm("Remove all sample records? Records you entered yourself are kept.")) return;
+            update((d) => clearSampleData(d), "Cleared sample data");
+            notify("Sample records removed.");
+          }}
+        >
+          Clear sample records
+        </button>
+        <button
+          className="primary"
+          disabled={!live}
+          title={live ? "" : "Wait for the live catalogue to load"}
+          onClick={() => {
+            if (!window.confirm("Rebuild sample data? This replaces current sales, orders, transfers, stock received and jobs, and spreads stock across showrooms.")) return;
+            update((d) => applySampleData(d, { seed: Date.now() % 100000 }), "Reloaded sample data");
+            notify("Fresh sample data loaded on the live catalogue.");
+          }}
+        >
+          Reload sample data
+        </button>
+      </div>
+    </section>
   );
 }

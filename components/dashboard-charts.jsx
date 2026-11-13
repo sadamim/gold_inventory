@@ -4,10 +4,11 @@ import { Panel } from "./ui";
 import { money } from "../lib/reporting.mjs";
 
 const STATUS_COLORS = {
-  Available: "#1e4a7a",
-  Reserved: "#7a96b8",
-  "In transit": "#5a7eab",
-  Quarantine: "#a8b4c4",
+  Available: "#9e1e2b",
+  Reserved: "#d4a84a",
+  "In transit": "#c9a24a",
+  Quarantine: "#e7cf98",
+  Sold: "#6e1420",
 };
 
 function conicGradient(segments) {
@@ -25,7 +26,7 @@ function conicGradient(segments) {
 }
 
 function statusCounts(items) {
-  const order = ["Available", "Reserved", "In transit", "Quarantine"];
+  const order = ["Available", "Reserved", "In transit", "Quarantine", "Sold"];
   return order.map((status) => ({
     status,
     count: items.filter((i) => i.status === status).length,
@@ -43,7 +44,7 @@ export default function DashboardCharts({ data }) {
       name: b.name,
       code: b.code,
       value: data.items
-        .filter((i) => i.branchId === b.id && i.status !== "In transit")
+        .filter((i) => i.branchId === b.id && i.status !== "In transit" && i.status !== "Sold")
         .reduce((sum, i) => sum + (Number(i.value) || 0), 0),
     }))
     .sort((a, b) => b.value - a.value);

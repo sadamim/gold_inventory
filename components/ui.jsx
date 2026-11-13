@@ -4,7 +4,7 @@ import { Box, Package } from "lucide-react";
 
 const AMBER = /Reserved|Pending|transit|Deposit|Review|With service|Inspection|Short|Overdue|Checking|workshop|Partly|Not listed/i;
 const RED = /Out of stock|Quarantine|Mismatch|unavailable|Rejected|Late/i;
-const NEUTRAL = /Cancelled|Demo|Completed|Delivered|Hidden/i;
+const NEUTRAL = /Cancelled|Demo|Completed|Delivered|Hidden|Sold|Voided/i;
 
 export function Badge({ children, tone }) {
   const text = String(children);

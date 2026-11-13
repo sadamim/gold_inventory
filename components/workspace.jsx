@@ -4,6 +4,10 @@ import UsersPage, { allowedSections, loginAccounts } from "./users-page";
 import { CustomerOrders, OnlineStore, ServiceJobs, StockReceivedSheet } from "./operations";
 import { Badge, Empty, Metric, Panel, Photo, csvDownload } from "./ui";
 import DashboardCharts from "./dashboard-charts";
+import SalesPage from "./sales-page";
+import ItemCard from "./item-card";
+import { PAYMENT_MODES, istDayKey, recordSale, salesForDay, summarizeSales, voidSale } from "../lib/sales.mjs";
+import { applySampleData } from "../lib/sample-data.mjs";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
@@ -39,6 +43,7 @@ import {
   EyeOff,
   Mail,
   LockKeyhole,
+  ReceiptIndianRupee,
 } from "lucide-react";
 import { SECTIONS, createSeed, demoUsers, jewellery, jewelleryImage, migrateBranches, migrateJewellery } from "../lib/data.mjs";
 import { mergeApiItems } from "../lib/products.mjs";
@@ -56,6 +61,7 @@ import {
 const STORAGE = "global-inventory-next-v2";
 const ICONS = {
   overview: LayoutDashboard,
+  sales: ReceiptIndianRupee,
   inventory: Box,
   branches: Building2,
   transfers: ArrowLeftRight,
@@ -188,7 +194,22 @@ function Login({ onLogin, accounts }) {
   const [email, setEmail] = useState(demoUsers[0].email),
     [password, setPassword] = useState(""),
     [error, setError] = useState(""),
-    [visible, setVisible] = useState(false);
+    [visible, setVisible] = useState(false),
+    [showcase, setShowcase] = useState(() => jewellery.slice(0, 4).map((j) => ({ id: j.kind, name: j.name, image: jewelleryImage(j.kind) })));
+  // Show live CKC product photos on the sign-in screen when the catalogue is reachable.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/products", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        const live = (body?.items || []).filter((i) => i.image).slice(0, 4);
+        if (alive && live.length === 4) setShowcase(live);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   function submit(e) {
     e.preventDefault();
     const user = accounts.find((u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password);
@@ -202,25 +223,21 @@ function Login({ onLogin, accounts }) {
     <div className="login-page">
       <div className="login-story">
         <a className="brand" href="#">
-          <span className="brand-symbol">
-            <Globe2 />
-          </span>
-          <span>
-            Inventory<small>IMS</small>
-          </span>
+          <img className="brand-logo" src="/assets/brand/ckc-logo-white.png" alt="C. Krishniah Chetty Group of Jewellers" />
+          <small className="brand-caption">GOLD INVENTORY</small>
         </a>
         <div className="story-copy">
-          <span className="overline">ONE WORKSPACE. EVERY LOCATION.</span>
+          <span className="overline">CKC JEWELLERS · GOLD INVENTORY</span>
           <h1>
-            Good business
+            Every gram
             <br />
-            starts with a<br />
-            <em>clearer view.</em>
+            of gold, in<br />
+            <em>clear view.</em>
           </h1>
           <p>
-            Products, people and every handover.
+            Live CKC gold catalogue, showroom stock and every handover.
             <br />
-            Connected from one branch to the next.
+            Connected from one showroom to the next.
           </p>
           <div className="story-chips">
             <span>
@@ -232,14 +249,15 @@ function Login({ onLogin, accounts }) {
           </div>
         </div>
         <div className="login-product-grid">
-          {jewellery.slice(0, 4).map((j) => (
-            <Photo key={j.kind} item={{ name: j.name, image: jewelleryImage(j.kind) }} />
+          {showcase.map((j) => (
+            <Photo key={j.id} item={j} />
           ))}
         </div>
-        <span className="login-foot">Built for the way your inventory moves.</span>
+        <span className="login-foot">Crafted for CKC Jewellers showrooms.</span>
       </div>
       <div className="login-form-side">
         <div className="login-card">
+          <img className="login-card-logo" src="/assets/brand/ckc-logo-red-text.png" alt="C. Krishniah Chetty Group of Jewellers" />
           <span className="eyebrow">WELCOME TO YOUR WORKSPACE</span>
           <h2>Welcome back.</h2>
           <p>Sign in to keep everything moving.</p>
@@ -327,6 +345,9 @@ export default function Workspace() {
     [search, setSearch] = useState(""),
     [locationFilter, setLocationFilter] = useState("all"),
     [statusFilter, setStatusFilter] = useState("all"),
+    [categoryFilter, setCategoryFilter] = useState("all"),
+    [stockSort, setStockSort] = useState("default"),
+    [stockView, setStockView] = useState("table"),
     [branchView, setBranchView] = useState("all"),
     [period, setPeriod] = useState("yesterday"),
     [reportBranch, setReportBranch] = useState("all"),
@@ -348,7 +369,8 @@ export default function Workspace() {
     } catch {
       saved = null;
     }
-    const loaded = saved ? migrateJewellery(migrateBranches(saved)) : createSeed();
+    const migrated = saved ? migrateJewellery(migrateBranches(saved)) : createSeed();
+    const loaded = Array.isArray(migrated.sales) ? migrated : { ...migrated, sales: [] };
     setData(loaded);
     try {
       setUser(loginAccounts(loaded).find((u) => u.id === sessionStorage.getItem("global-demo-user")) || null);
@@ -369,22 +391,32 @@ export default function Workspace() {
       const r = await fetch("/api/products" + (refresh ? "?refresh=1" : ""), { cache: "no-store", signal: AbortSignal.timeout(20000) });
       const body = await r.json();
       if (!r.ok || !Array.isArray(body.items) || !body.items.length) throw new Error(body.error || "No products");
-      setData((d) =>
-        d
-          ? {
-              ...d,
-              items: mergeApiItems(d.items, body.items),
-              catalog: { source: body.source, fetchedAt: body.fetchedAt, count: body.count },
-            }
-          : d,
-      );
+      setData((d) => {
+        if (!d) return d;
+        const next = {
+          ...d,
+          items: mergeApiItems(d.items, body.items),
+          catalog: { source: body.source, fetchedAt: body.fetchedAt, count: body.count },
+        };
+        // First live load: build sample sales, orders, transfers, receipts and jobs on the CKC products.
+        return d.sampleData ? next : applySampleData(next);
+      });
       setCatalog({ state: body.stale ? "stale" : "live", source: body.source, fetchedAt: body.fetchedAt, count: body.count });
     } catch {
       setCatalog({ state: "error" });
     }
   }
+  // Load on start, then refresh the live CKC catalogue every 5 minutes (and when the tab regains focus).
   useEffect(() => {
-    if (ready) loadCatalog();
+    if (!ready) return;
+    loadCatalog();
+    const timer = setInterval(() => loadCatalog(), 5 * 60 * 1000);
+    const onVisible = () => document.visibilityState === "visible" && loadCatalog();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [ready]);
   useEffect(() => {
     if (!ready || !data) return;
@@ -445,12 +477,12 @@ export default function Workspace() {
       <div className="page-heading">
         <div className="page-heading-main">
           <div className="eyebrow">
-            INVENTORY IMS <span>/</span> {navigation.find((n) => n[0] === route)?.[1]?.toUpperCase()}
+            CKC INVENTORY <span>/</span> {navigation.find((n) => n[0] === route)?.[1]?.toUpperCase()}
           </div>
           <div className="page-title-metrics">
             <div className="page-title-copy">
               <h1>{title}</h1>
-              <p>{sub}</p>
+              {sub ? <p>{sub}</p> : null}
             </div>
             {metrics ? <div className="heading-aside">{metrics}</div> : null}
           </div>
@@ -506,6 +538,37 @@ export default function Workspace() {
     );
     setDialog(null);
     notify("Reservation created. The item is now protected.");
+  }
+  function sell(e) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const itemId = f.get("item");
+    try {
+      const next = recordSale(data, {
+        itemId,
+        price: f.get("price"),
+        payment: f.get("payment"),
+        customer: f.get("customer"),
+        phone: f.get("phone"),
+        soldBy: user.name,
+      });
+      const sale = next.sales[0];
+      update(() => next, `Sold ${itemId} for ${money(sale.price)} (${sale.payment})`);
+      setDialog(null);
+      notify(`Sale recorded · ${money(sale.price)}. ${itemId} is now marked Sold.`);
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+  function undoSale(s) {
+    if (!window.confirm(`Void sale ${s.id} (${money(s.price)})? The item returns to available stock.`)) return;
+    try {
+      const next = voidSale(data, s.id, { by: user.name });
+      update(() => next, `Voided sale ${s.id}`);
+      notify("Sale voided. The item is available again.");
+    } catch (err) {
+      notify(err.message);
+    }
   }
   function cancelHold(h) {
     if (h.state !== "Payment pending") return;
@@ -669,13 +732,22 @@ export default function Workspace() {
   const allowed = allowedSections(data, user);
   const route = allowed.includes(routeState) ? routeState : allowed[0] || "overview";
   const menuItems = navigation.filter(([id]) => allowed.includes(id));
-  const firstManagement = menuItems.find(([id]) => navigation.findIndex((n) => n[0] === id) >= 6)?.[0];
+  const firstManagement = menuItems.find(([id]) => navigation.findIndex((n) => n[0] === id) >= navigation.findIndex((n) => n[0] === "channels"))?.[0];
   const filteredItems = data.items.filter(
     (i) =>
       (i.name + " " + i.id + " " + i.category).toLowerCase().includes(search.toLowerCase()) &&
       (locationFilter === "all" || i.branchId === locationFilter) &&
-      (statusFilter === "all" || i.status === statusFilter),
+      (statusFilter === "all" || i.status === statusFilter) &&
+      (categoryFilter === "all" || i.category === categoryFilter),
   );
+  const STOCK_SORTS = {
+    "price-desc": (a, b) => (b.value || 0) - (a.value || 0),
+    "price-asc": (a, b) => (a.value || 0) - (b.value || 0),
+    "weight-desc": (a, b) => (b.weight || 0) - (a.weight || 0),
+    name: (a, b) => String(a.name).localeCompare(String(b.name)),
+  };
+  if (STOCK_SORTS[stockSort]) filteredItems.sort(STOCK_SORTS[stockSort]);
+  const categories = [...new Set(data.items.map((i) => i.category).filter(Boolean))].sort();
   const inventoryPageCount = Math.max(1, Math.ceil(filteredItems.length / INVENTORY_PAGE_SIZE));
   const inventoryPageSafe = Math.min(inventoryPage, inventoryPageCount - 1);
   const pagedItems = filteredItems.slice(
@@ -686,12 +758,17 @@ export default function Workspace() {
     if (next.search !== undefined) setSearch(next.search);
     if (next.location !== undefined) setLocationFilter(next.location);
     if (next.status !== undefined) setStatusFilter(next.status);
+    if (next.category !== undefined) setCategoryFilter(next.category);
+    if (next.sort !== undefined) setStockSort(next.sort);
     setInventoryPage(0);
   }
   const available = data.items.filter((i) => i.status === "Available"),
     held = data.items.filter((i) => i.status === "Reserved"),
     transit = data.items.filter((i) => i.status === "In transit");
-  const totalValue = data.items.filter((i) => i.owner === "Company").reduce((sum, i) => sum + i.value, 0);
+  const onHand = data.items.filter((i) => i.status !== "Sold");
+  const totalValue = onHand.filter((i) => i.owner === "Company").reduce((sum, i) => sum + i.value, 0);
+  const todayList = salesForDay(data.sales || [], istDayKey());
+  const todaySales = summarizeSales(todayList);
   const reportRange =
     reportDateStart && reportDateEnd ? calendarRangeInclusive(reportDateStart, reportDateEnd) : periodRange(period);
   const report = summarizeTransfers(data.transfers, data.branches, period, reportBranch, new Date(), reportRange);
@@ -837,10 +914,11 @@ export default function Workspace() {
   );
   const statMetrics = (
     <>
-      <Metric compact label="Registered stock" value={data.items.length} sub={`Across ${data.branches.length} branches`} icon={Package} />
+      <Metric compact label="Stock on hand" value={onHand.length} sub={`Across ${data.branches.length} branches · sold items excluded`} icon={Package} />
       <Metric compact label="Available to sell" value={available.length} sub="Eligible for central reservation" icon={CheckCheck} />
       <Metric compact label="Inventory value" value={money(totalValue)} sub="Company-owned · sample INR value" icon={BarChart3} />
-      <Metric compact label="In transit" value={transit.length} sub="Protected until receipt is confirmed" icon={Truck} tone="accent" />
+      <Metric compact label="In transit" value={transit.length} sub="Protected until receipt is confirmed" icon={Truck} />
+      <Metric compact label="Sold today" value={money(todaySales.value)} sub={`${todaySales.pieces} pieces · open Today's Sales`} icon={ReceiptIndianRupee} tone="accent" />
     </>
   );
 
@@ -848,12 +926,8 @@ export default function Workspace() {
     <div className={`app ${menu ? "menu-open" : ""}`}>
       <aside className="sidebar">
         <a className="brand" href="#overview" onClick={() => go("overview")}>
-          <span className="brand-symbol">
-            <Globe2 />
-          </span>
-          <span>
-            Inventory<small>IMS</small>
-          </span>
+          <img className="brand-logo" src="/assets/brand/ckc-logo-white.png" alt="C. Krishniah Chetty Group of Jewellers" />
+          <small className="brand-caption">GOLD INVENTORY</small>
         </a>
         <div className="workspace-label">OPERATIONS WORKSPACE</div>
         <nav>
@@ -906,7 +980,14 @@ export default function Workspace() {
           </div>
           <HeaderRates />
           <div className="header-right">
-            <span className="demo-tag">{data.catalog ? "LIVE PRODUCTS" : "DEMO DATA"}</span>
+            {data.catalog ? (
+              <span className="demo-tag live-tag" role="status" aria-label="Live products from ckcjewellers.com">
+                <i aria-hidden="true" />
+                LIVE PRODUCTS
+              </span>
+            ) : (
+              <span className="demo-tag">DEMO DATA</span>
+            )}
             <span className="date-header">{dateLabel(new Date())}</span>
             <span className="avatar">{user.initials}</span>
             <button className="icon-button mobile-logout" onClick={logout} aria-label="Sign out">
@@ -924,7 +1005,7 @@ export default function Workspace() {
             <>
               {heading(
                 "Dashboard",
-                "Overview metrics, featured stock and branch activity.",
+                "",
                 <>
                   <button onClick={() => go("reports")}>
                     <BarChart3 size={16} /> View reports
@@ -936,6 +1017,60 @@ export default function Workspace() {
                 statMetrics,
               )}
               <DashboardCharts data={data} />
+              <div className="two-col dashboard-today">
+                <Panel
+                  title="Sold today"
+                  sub={`${todaySales.pieces} pieces · ${money(todaySales.value)} · ${Number(todaySales.weight).toFixed(2)} g gold`}
+                  action={
+                    <button className="text-button" onClick={() => go("sales")}>
+                      Today's Sales <ArrowRight size={15} />
+                    </button>
+                  }
+                >
+                  {todayList.length ? (
+                    <div className="activity-list">
+                      {todayList.slice(0, 5).map((x) => (
+                        <div key={x.id}>
+                          <Photo item={x} />
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <b>{x.name.length > 44 ? x.name.slice(0, 43) + "…" : x.name}</b>
+                            <small>
+                              {branchName(x.branchId)} · {x.payment} · {dateTime(x.soldAt)}
+                            </small>
+                          </span>
+                          <b>{money(x.price)}</b>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty>No sales yet today.</Empty>
+                  )}
+                </Panel>
+                <Panel title="Needs attention" sub="Open work across showrooms">
+                  <div className="activity-list">
+                    {[
+                      ["Customer orders awaiting payment", data.holds.filter((h) => h.state === "Payment pending").length, "reservations"],
+                      ["Orders with deposit, ready to bill", data.holds.filter((h) => h.state === "Deposit received").length, "reservations"],
+                      ["Transfers to dispatch", data.transfers.filter((t) => t.status === "Requested").length, "transfers"],
+                      ["Transfers in transit", data.transfers.filter((t) => t.status === "In transit").length, "transfers"],
+                      ["Stock received pending check", (data.receipts || []).filter((r) => r.status === "Pending check").length, "inward"],
+                      ["Repair & return jobs open", (data.service || []).filter((j) => j.stage < 4).length, "service"],
+                    ]
+                      .filter(([, , id]) => allowed.includes(id))
+                      .map(([label, count, id]) => (
+                        <div key={label}>
+                          <span style={{ flex: 1 }}>
+                            <b>{label}</b>
+                          </span>
+                          <Badge tone={count ? "amber" : "neutral"}>{count}</Badge>
+                          <button className="text-button" onClick={() => go(id)} aria-label={`Open ${label}`}>
+                            <ArrowRight size={15} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </Panel>
+              </div>
               <div className="feature-heading">
                 <div>
                   <h2>Your collection, connected.</h2>
@@ -969,7 +1104,7 @@ export default function Workspace() {
                   </button>
                 ))}
               </div>
-              <div className="image-note">Illustrative jewellery images · Sample inventory values</div>
+              <div className="image-note">{data.catalog ? "Product photos and prices from ckcjewellers.com · updated live" : "Illustrative jewellery images · Sample inventory values"}</div>
               <div className="two-col">
                 <Panel
                   title="A network in motion"
@@ -981,7 +1116,7 @@ export default function Workspace() {
                   }
                 >
                   {data.branches.map((b) => {
-                    const n = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit").length;
+                    const n = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit" && i.status !== "Sold").length;
                     return (
                       <button
                         className="branch-bar"
@@ -1065,7 +1200,7 @@ export default function Workspace() {
             <>
               {heading(
                 "Stock",
-                "Find products and check how many are available at each branch.",
+                "",
                 <>
                   <button onClick={inventoryExport}>
                     <Download size={16} /> Export stock
@@ -1082,7 +1217,7 @@ export default function Workspace() {
                 title="Item inventory"
                 sub={(() => {
                   const stockN = data.items.filter(
-                    (i) => (locationFilter === "all" || i.branchId === locationFilter) && i.status !== "In transit",
+                    (i) => (locationFilter === "all" || i.branchId === locationFilter) && i.status !== "In transit" && i.status !== "Sold",
                   ).length;
                   const availN = available.filter((i) => locationFilter === "all" || i.branchId === locationFilter).length;
                   let cat = "Loading catalogue…";
@@ -1142,22 +1277,69 @@ export default function Workspace() {
                     onChange={(e) => setInventoryFilters({ status: e.target.value })}
                   >
                     <option value="all">All statuses</option>
-                    {["Available", "Out of stock", "Reserved", "In transit", "Quarantine"].map((s) => (
+                    {["Available", "Sold", "Out of stock", "Reserved", "In transit", "Quarantine"].map((s) => (
                       <option key={s}>{s}</option>
                     ))}
                   </select>
+                  <select aria-label="Category" value={categoryFilter} onChange={(e) => setInventoryFilters({ category: e.target.value })}>
+                    <option value="all">All categories</option>
+                    {categories.map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
+                  </select>
+                  <select aria-label="Sort stock" value={stockSort} onChange={(e) => setInventoryFilters({ sort: e.target.value })}>
+                    <option value="default">Sort: catalogue order</option>
+                    <option value="price-desc">Price: high to low</option>
+                    <option value="price-asc">Price: low to high</option>
+                    <option value="weight-desc">Weight: heaviest first</option>
+                    <option value="name">Name: A–Z</option>
+                  </select>
+                  <div className="segmented view-toggle" role="group" aria-label="Stock view">
+                    <button className={stockView === "table" ? "active" : ""} onClick={() => setStockView("table")} aria-pressed={stockView === "table"}>
+                      Table
+                    </button>
+                    <button className={stockView === "grid" ? "active" : ""} onClick={() => setStockView("grid")} aria-pressed={stockView === "grid"}>
+                      Photos
+                    </button>
+                  </div>
                   <button
                     onClick={() => {
                       setSearch("");
                       setLocationFilter("all");
                       setStatusFilter("all");
+                      setCategoryFilter("all");
+                      setStockSort("default");
                       setInventoryPage(0);
                     }}
                   >
                     Reset
                   </button>
                 </div>
-                <ItemTable items={pagedItems} />
+                {stockView === "grid" ? (
+                  <div className="product-grid stock-grid">
+                    {pagedItems.map((i) => (
+                      <button className="product-card" key={i.id} onClick={() => showItem(i.id)}>
+                        <div className="product-cover">
+                          <Photo large item={i} />
+                          <Badge>{i.status}</Badge>
+                        </div>
+                        <div className="product-info">
+                          <span>
+                            {i.category}
+                            {i.weight ? ` · ${Number(i.weight).toFixed(2)} g` : ""}
+                          </span>
+                          <h3>{i.name}</h3>
+                          <div>
+                            <small>{branchName(i.branchId)}</small>
+                            <b>{money(i.value)}</b>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <ItemTable items={pagedItems} />
+                )}
                 {filteredItems.length > 0 && (
                   <div className="table-pager" role="navigation" aria-label="Inventory pages">
                     <span>
@@ -1208,7 +1390,7 @@ export default function Workspace() {
                 </button>,
                 <div className="branch-picker-inline">
                   {data.branches.map((b) => {
-                    const stock = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit");
+                    const stock = data.items.filter((i) => i.branchId === b.id && i.status !== "In transit" && i.status !== "Sold");
                     const avail = stock.filter((i) => i.status === "Available").length;
                     return (
                       <button
@@ -1221,7 +1403,7 @@ export default function Workspace() {
                         <span className={"branch-monogram " + b.tone}>{b.code}</span>
                         <span className="branch-chip-name">{b.name}</span>
                         <span className="branch-chip-stats">
-                          {stock.length} · {avail} avail
+                          {stock.length} · {avail} avail · {todayList.filter((x) => x.branchId === b.id).length} sold today
                         </span>
                       </button>
                     );
@@ -1570,6 +1752,9 @@ export default function Workspace() {
               </Panel>
             </>
           )}
+          {route === "sales" && (
+            <SalesPage data={data} heading={heading} branchName={branchName} setDialog={setDialog} showItem={showItem} onVoid={undoSale} />
+          )}
           {route === "reservations" && <CustomerOrders data={data} heading={heading} setDialog={setDialog} showItem={showItem} />}
           {route === "channels" && (
             <OnlineStore
@@ -1649,20 +1834,21 @@ export default function Workspace() {
         </main>
         <footer>
           <span>
-            Inventory IMS <i>Operations, beautifully connected.</i>
+            CKC Jewellers Inventory <i>Gold, tracked across every showroom.</i>
           </span>
-          <span>Demo accounts & stock · Browser-local records · Metal rates from external feeds</span>
+          <span>Live products from ckcjewellers.com · Browser-local stock records · Metal rates from external feeds</span>
         </footer>
       </div>
       <dialog
         ref={dialogRef}
+        className={dialog?.type === "item" ? "dialog-wide" : ""}
         onCancel={() => setDialog(null)}
         onClick={(e) => {
           if (e.target === e.currentTarget) setDialog(null);
         }}
       >
         <div className="dialog-header">
-          <span className="eyebrow">INVENTORY IMS</span>
+          <span className="eyebrow">CKC JEWELLERS</span>
           <button className="icon-button" onClick={() => setDialog(null)} aria-label="Close dialog">
             <X size={21} />
           </button>
@@ -1691,69 +1877,68 @@ export default function Workspace() {
       i = data.items.find((i) => i.id === dialog.id);
     if (dialog.type === "item" && i)
       return (
+        <ItemCard
+          item={i}
+          data={data}
+          branchName={branchName}
+          notify={notify}
+          onReserve={() => setDialog({ type: "reserve", id: i.id })}
+          onSell={() => setDialog({ type: "sell", id: i.id })}
+          onTransfer={() => setDialog({ type: "newTransfer", id: i.id })}
+        />
+      );
+    if (dialog.type === "sell") {
+      const sellable = data.items.filter((x) => x.status === "Available" || x.status === "Reserved");
+      const chosen = sellable.find((x) => x.id === dialog.id) || sellable[0];
+      const hold = chosen && data.holds.find((h) => h.itemId === chosen.id && !["Cancelled", "Completed"].includes(h.state));
+      return (
         <>
-          <Photo item={i} large />
-          <h2>{i.name}</h2>
-          {i.description && <p className="muted item-description">{i.description}</p>}
-          <p className="muted">
-            {i.id} · {i.category}
-          </p>
-          <Badge>{i.status}</Badge>
-          <div className="detail-grid">
-            {[
-              ["Category", i.category],
-              ["Purity", i.purity || "—"],
-              ["Weight", i.weight ? Number(i.weight).toFixed(2) + " g" : "—"],
-              ["Design details", i.source === "api" ? i.variant : String(i.variant).split(" · ").slice(2).join(" · ") || i.variant],
-              ["Stock unit", i.unit],
-              ["Stock count", i.status === "In transit" ? 0 : 1],
-              ["Available in this branch", i.status === "Available" ? "1 unit" : "0 units"],
-              ["Branch", branchName(i.branchId)],
-              ...(i.source === "api"
-                ? [
-                    ["SKU", i.sku || i.id],
-                    ["Quantity in stock", i.qty ?? "—"],
-                  ]
-                : []),
-              ["Ownership", i.owner],
-              ["Sample value", money(i.value)],
-              ["Original stock age", i.age + " days"],
-              ["Custody", i.status === "In transit" ? "In transit" : "Branch storage"],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <span>{k}</span>
-                <b>{v}</b>
-              </div>
-            ))}
-          </div>
-          <h3>Item history</h3>
-          <div className="timeline">
-            <p>
-              Identity registered<small>Original receipt and identity retained</small>
-            </p>
-            <p>
-              {i.status === "Quarantine" ? "Inspection pending" : "Quality inspection accepted"}
-              <small>Inventory operations · Demo record</small>
-            </p>
-            {data.transfers
-              .filter((t) => t.itemId === i.id)
-              .map((t) => (
-                <p key={t.id}>
-                  {branchName(t.from)} → {branchName(t.to)}
+          <h2>Record a sale</h2>
+          <p>The item is marked Sold and counted in today’s sales.</p>
+          {chosen ? (
+            <form onSubmit={sell} key={chosen.id}>
+              <label>
+                Item
+                <select name="item" defaultValue={chosen.id} required onChange={(e) => setDialog({ type: "sell", id: e.target.value })}>
+                  {sellable.map((x) => (
+                    <option value={x.id} key={x.id}>
+                      {x.id} · {x.name.slice(0, 60)} · {branchName(x.branchId)}
+                      {x.status === "Reserved" ? " · reserved" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="sell-preview">
+                <Photo item={chosen} />
+                <div>
+                  <b>{chosen.brand || "CKC"} · {chosen.category}</b>
                   <small>
-                    Sent by {t.sender} · {dateTime(t.sentAt)} IST
+                    {chosen.weight ? `${Number(chosen.weight).toFixed(2)} g · ` : ""}List {money(chosen.value)}
                   </small>
-                  <small>{t.receiver ? `Received by ${t.receiver} · ${dateTime(t.receivedAt)} IST` : "Receipt pending"}</small>
-                </p>
-              ))}
-          </div>
-          {i.status === "Available" && (
-            <button className="primary" onClick={() => setDialog({ type: "reserve", id: i.id })}>
-              Reserve this item <ShieldCheck size={17} />
-            </button>
+                </div>
+              </div>
+              <div className="form-grid">
+                {field("Sale price ₹", "price", { type: "number", min: 1, step: 1, defaultValue: chosen.value || "" })}
+                <label>
+                  Payment
+                  <select name="payment">
+                    {PAYMENT_MODES.map((m) => (
+                      <option key={m}>{m}</option>
+                    ))}
+                  </select>
+                </label>
+                {field("Customer name", "customer", { maxLength: 60, required: false, defaultValue: hold?.customer || "", placeholder: "Walk-in" })}
+                {field("Phone", "phone", { maxLength: 20, required: false, inputMode: "tel", defaultValue: hold?.phone || "" })}
+              </div>
+              {hold && <div className="notice">Completes customer order {hold.id} for {hold.customer}.</div>}
+              <button className="primary">Record sale · {branchName(chosen.branchId)}</button>
+            </form>
+          ) : (
+            <Empty>No available or reserved items to sell.</Empty>
           )}
         </>
       );
+    }
     if (dialog.type === "reserve")
       return (
         <>
@@ -1828,7 +2013,7 @@ export default function Workspace() {
           <form onSubmit={requestTransfer}>
             <label>
               Available goods
-              <select name="item" required>
+              <select name="item" required defaultValue={dialog.id}>
                 {available.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.id} · {i.name} · {branchName(i.branchId)}

@@ -567,10 +567,15 @@ export function CustomerOrders({ data, heading, setDialog, showItem }) {
                     <Badge>{o.state}</Badge>
                   </td>
                   <td>
-                    {o.state === "Payment pending" ? (
-                      <button onClick={() => setDialog({ type: "cancel", id: o.id })}>Cancel</button>
-                    ) : o.state === "Deposit received" ? (
-                      <span className="muted">Finance review</span>
+                    {["Payment pending", "Deposit received"].includes(o.state) && o.item.status === "Reserved" ? (
+                      <div className="row-actions">
+                        <button className="primary" onClick={() => setDialog({ type: "sell", id: o.item.id })}>
+                          Sell
+                        </button>
+                        {o.state === "Payment pending" && <button onClick={() => setDialog({ type: "cancel", id: o.id })}>Cancel</button>}
+                      </div>
+                    ) : o.state === "Completed" ? (
+                      <span className="muted">Billed</span>
                     ) : (
                       <span className="muted">Item released</span>
                     )}

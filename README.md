@@ -1,6 +1,6 @@
-# Inventory IMS
+# CKC Jewellers — Gold Inventory
 
-A Next.js / React prototype for general inventory, branch records, transfers, reservations and reporting.
+A Next.js / React inventory workspace for CKC Jewellers: live gold catalogue from ckcjewellers.com, showroom stock, transfers, customer orders and reporting. Themed in CKC red, gold and ivory.
 
 ## Run
 
@@ -37,11 +37,49 @@ Jewellery images are bundled SVG illustrations in `public/assets/jewellery/`. Ea
 
 In **Users**, create a user with an email and password and tick the sidebar sections they may see (Dashboard, Stock, Branches, etc.). Role presets fill the ticks quickly. The user can then sign in, sees only those sections, and blocked pages cannot be opened by link. This is browser-local demo access control, not production security.
 
-## Product API
+## Today's Sales
 
-Stock items, prices and images load from the Muliya product API through the server route `/api/products`
-(source: `https://muliya-dev-six.vercel.app/api/product/allProduct?lang=1`, cached 5 minutes). Mapping lives in
-`lib/products.mjs`. To use another environment, set `PRODUCTS_API_URL` (and `PRODUCTS_API_TOKEN` if it needs a
-bearer token) in `.env.local` or Vercel. If the API is unreachable, the last loaded catalogue (or the demo jewellery)
-is shown. The API has no branch field, so products start at the first branch; local reservations, transfers and
-branch moves are kept across refreshes.
+**Today's Sales** in the sidebar shows what sold on the current IST day: sales value, pieces, gold weight sold and
+average bill, broken down by brand, category, showroom and payment mode. It also shows stock left to sell per brand,
+lets you pick another day or one showroom, and exports the day as CSV.
+
+Record a sale with **New sale**, or open any Available or Reserved item and choose **Sell this item**. The item becomes
+**Sold** (excluded from stock on hand and inventory value, and kept Sold across catalogue refreshes). Selling a reserved
+item completes its customer order. **Void** reverses a mistaken sale and returns the item to stock; the voided record is
+kept. Sales are stored in this browser like the rest of the demo workspace (`lib/sales.mjs`).
+
+## Sample data
+
+The first time the live CKC catalogue loads, the app builds sample records on those products (`lib/sample-data.mjs`)
+so every page has data: 30 days of sales history plus today's sales, customer orders, branch transfers, stock received
+and repair/return jobs, with stock spread across the four showrooms. Sample records are marked `sample: true`.
+In **Users → Sample data** you can **Reload sample data** (new random set) or **Clear sample records** (keeps records
+you entered yourself).
+
+## Page options
+
+- **Today's Sales:** Today / Yesterday / Last 7 days / This month / Last 30 days / pick a day; showroom, payment and
+  search filters; 14-day sales trend (click a bar to open that day); top designs; sales by staff.
+- **Stock:** category filter, sort (price, weight, name), and a Table / Photos view.
+- **Dashboard:** "Sold today" list and a "Needs attention" list of open orders, transfers, receipts and jobs.
+- **Branches:** each showroom shows pieces sold today.
+- **Customer Orders:** **Sell** bills a reserved piece directly and completes the order.
+
+## Product catalogue (live from CKC Jewellers)
+
+Stock items, prices and photos load live from the CKC Jewellers storefront through the server route `/api/products`
+(`lib/ckc.mjs`):
+
+1. Product list — `Search-UpdateGrid?cgid=gold` (the data behind https://www.ckcjewellers.com/en_IN/gold): ID, title,
+   description, price, photo, size, availability and best-seller flag.
+2. Product details — `Product-Variation?pid=…` for each item: net metal weight and the full image gallery. If a detail
+   call fails, the item keeps its list data.
+
+The server caches the catalogue for 5 minutes. The app refreshes it on start, every 5 minutes and when the tab regains
+focus, and the **Refresh** button forces a new fetch. Each item links back to its page on ckcjewellers.com. CKC does not
+publish purity in this data, so purity shows "—" rather than a guess. Prices are the storefront prices at fetch time.
+
+Settings (`.env.local` or Vercel): `CKC_CATEGORY` (default `gold`), `CKC_LIMIT` (default 48, max 200). To use a JSON
+product API instead, set `PRODUCTS_API_URL` (and `PRODUCTS_API_TOKEN` if needed); the `{ products: [...] }` format is
+mapped by `lib/products.mjs`. If the catalogue is unreachable, the last loaded catalogue (or the demo jewellery) is shown.
+Products start at the first branch; local reservations, transfers and branch moves are kept across refreshes.
